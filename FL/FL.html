@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="pageTitle">FilmLibres - Free Public Domain Streaming</title>
+    <style>
+        /* CSS INLINE pour le Thème Netflix/Sombre */
+        :root {
+            --primary-color: #e50914; /* Rouge Netflix */
+            --secondary-color: #141414; /* Fond Principal Sombre */
+            --text-color: #ffffff;
+            --card-bg: #222222;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background-color: var(--secondary-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+
+        header {
+            background-color: #000;
+            padding: 20px 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 3px solid var(--primary-color);
+        }
+
+        .logo {
+            color: var(--primary-color);
+            font-size: 2em;
+            font-weight: bold;
+            text-decoration: none;
+            letter-spacing: -1px;
+        }
+
+        nav a {
+            color: var(--text-color);
+            text-decoration: none;
+            margin-left: 25px;
+            font-size: 1.1em;
+            transition: color 0.3s;
+        }
+
+        nav a:hover {
+            color: var(--primary-color);
+        }
+        
+        #language-toggle {
+            cursor: pointer;
+            padding: 5px 10px;
+            border: 1px solid var(--text-color);
+            border-radius: 5px;
+            font-size: 0.9em;
+            transition: background-color 0.3s;
+        }
+
+        #language-toggle:hover {
+            background-color: #333;
+        }
+
+        main {
+            padding: 40px 60px;
+        }
+
+        h2 {
+            color: var(--text-color);
+            margin-bottom: 20px;
+            border-left: 5px solid var(--primary-color);
+            padding-left: 15px;
+        }
+
+        .film-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .film-card {
+            background-color: var(--card-bg);
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+
+        .film-card:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.7);
+        }
+
+        .film-card img {
+            width: 100%;
+            height: 300px;
+            object-fit: cover;
+            display: block;
+            background-color: #555; /* Placeholder color */
+        }
+
+        .film-info {
+            padding: 15px;
+        }
+
+        .film-info h3 {
+            margin-top: 0;
+            font-size: 1.2em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0,0,0,0.9); 
+        }
+
+        .modal-content {
+            background-color: #1c1c1c;
+            margin: 5% auto; 
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%; 
+            max-width: 900px;
+            border-radius: 10px;
+        }
+
+        .close-btn {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .close-btn:hover,
+        .close-btn:focus {
+            color: #fff;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        
+        #video-player {
+            width: 100%;
+            height: 400px;
+            background-color: #000;
+        }
+
+        .loading-message {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.5em;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <a href="#" class="logo">FilmLibres</a>
+        <nav>
+            <a href="#" id="navHome">Home</a>
+            <a href="#" id="navFilms">Films</a>
+            <a href="#" id="navCategories">Categories</a>
+        </nav>
+        <span id="language-toggle">Français</span>
+    </header>
+
+    <main>
+        <h2 id="sectionTitle">Recently Added (Public Domain)</h2>
+        <div id="filmsContainer" class="film-list">
+            <p class="loading-message" id="loadingMessage">Loading films from GitHub...</p>
+        </div>
+    </main>
+
+    <div id="videoModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h3 id="player-title" style="color: var(--primary-color); text-align: center;"></h3>
+            
+            <video id="video-player" controls preload="metadata">
+                Your browser does not support the video tag.
+            </video>
+            
+            <p id="videoNotes" style="color: #ccc; margin-top: 20px; font-size: 0.9em;"></p>
+        </div>
+    </div>
+
+
+    <script>
+        // --- CONFIGURATION À MODIFIER ---
+        const REPO_OWNER = 'votre-nom-utilisateur'; // e.g., 'MonCompte'
+        const REPO_NAME = 'nom-de-votre-depot';      // e.g., 'FilmLibres'
+        const VIDEO_DIR_PATH = 'Videos';             // Chemin vers le dossier des films
+        // ---------------------------------
+        
+        const GITHUB_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${VIDEO_DIR_PATH}`;
+        const GITHUB_PAGES_URL = `https://${REPO_OWNER}.github.io/${REPO_NAME}`;
+
+        const filmsContainer = document.getElementById('filmsContainer');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const videoModal = document.getElementById('videoModal');
+        const playerTitle = document.getElementById('player-title');
+        const videoPlayer = document.getElementById('video-player');
+        const videoNotes = document.getElementById('videoNotes');
+
+        let currentLang = 'en';
+
+        const translations = {
+            en: {
+                pageTitle: "FilmLibres - Free Public Domain Streaming",
+                navHome: "Home",
+                navFilms: "Films",
+                navCategories: "Categories",
+                sectionTitle: "Recently Added (Public Domain)",
+                languageToggle: "Français",
+                loading: "Loading films from GitHub...",
+                notesLabel: "Notes & Credits:",
+                errorLoading: "Error loading films. Check the repository path and your internet connection."
+            },
+            fr: {
+                pageTitle: "FilmLibres - Streaming Gratuit d'Œuvres Libres",
+                navHome: "Accueil",
+                navFilms: "Films",
+                navCategories: "Catégories",
+                sectionTitle: "Récemment Ajouté (Domaine Public)",
+                languageToggle: "English",
+                loading: "Chargement des films depuis GitHub...",
+                notesLabel: "Notes et Crédits :",
+                errorLoading: "Erreur lors du chargement des films. Vérifiez le chemin du dépôt et votre connexion internet."
+            }
+        };
+
+        // --- 1. Gestion de la Langue ---
+        function applyTranslations() {
+            const lang = currentLang;
+            document.getElementById('pageTitle').textContent = translations[lang].pageTitle;
+            document.getElementById('navHome').textContent = translations[lang].navHome;
+            document.getElementById('navFilms').textContent = translations[lang].navFilms;
+            document.getElementById('navCategories').textContent = translations[lang].navCategories;
+            document.getElementById('sectionTitle').textContent = translations[lang].sectionTitle;
+            document.getElementById('language-toggle').textContent = translations[lang].languageToggle;
+            document.getElementById('loadingMessage').textContent = translations[lang].loading;
+        }
+
+        document.getElementById('language-toggle').addEventListener('click', () => {
+            currentLang = currentLang === 'en' ? 'fr' : 'en';
+            applyTranslations();
+            // Re-render notes in modal if open
+            if(videoModal.style.display === "block") {
+                const title = playerTitle.textContent.split(' - ')[0]; // Basic title extraction
+                loadFilmDetails(title);
+            }
+        });
+        
+        applyTranslations(); // Initial application
+
+        // --- 2. Fonctions de l'API GitHub et de rendu ---
+
+        // Récupère la liste des films (noms des sous-dossiers)
+        async function fetchFilmList() {
+            try {
+                const response = await fetch(GITHUB_API_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                // Filtrer pour ne garder que les répertoires (les films)
+                const films = data
+                    .filter(item => item.type === 'dir')
+                    .map(item => ({
+                        title: item.name.replace(/([A-Z])/g, ' $1').trim(), // Ajoute un espace avant les majuscules (ExempleMovie -> Exemple Movie)
+                        dirName: item.name
+                    }));
+                
+                loadingMessage.style.display = 'none';
+                films.forEach(createFilmCard);
+                
+                if (films.length === 0) {
+                    loadingMessage.textContent = "No films found in the 'Videos' folder.";
+                    loadingMessage.style.display = 'block';
+                }
+
+            } catch (error) {
+                console.error("Error fetching film list:", error);
+                loadingMessage.textContent = translations[currentLang].errorLoading;
+                loadingMessage.style.display = 'block';
+            }
+        }
+        
+        // Crée l'élément visuel pour un film
+        function createFilmCard(film) {
+            const card = document.createElement('div');
+            card.className = 'film-card';
+
+            const posterURL = `${GITHUB_PAGES_URL}/${VIDEO_DIR_PATH}/${film.dirName}/Poster.png`;
+
+            card.innerHTML = `
+                <img src="${posterURL}" alt="Poster for ${film.title}" onerror="this.src='https://via.placeholder.com/200x300/444/FFFFFF?text=Poster+Not+Found'">
+                <div class="film-info">
+                    <h3>${film.title}</h3>
+                </div>
+            `;
+
+            card.addEventListener('click', () => openModal(film));
+            filmsContainer.appendChild(card);
+        }
+
+        // Récupère et affiche les notes et crédits du fichier .txt
+        async function loadFilmDetails(dirName) {
+            const notesURL = `${GITHUB_PAGES_URL}/${VIDEO_DIR_PATH}/${dirName}/Notes%26Credits.txt`;
+            
+            try {
+                const response = await fetch(notesURL);
+                if (!response.ok) {
+                    videoNotes.textContent = `${translations[currentLang].notesLabel} File not found or failed to load.`;
+                    return;
+                }
+                const text = await response.text();
+                videoNotes.innerHTML = `<strong>${translations[currentLang].notesLabel}</strong><br>` + text.replace(/\n/g, '<br>');
+            } catch(e) {
+                videoNotes.textContent = `${translations[currentLang].notesLabel} Failed to fetch file.`;
+            }
+        }
+
+        // --- 3. Gestion de la Modale ---
+        function openModal(film) {
+            const videoURL = `${GITHUB_PAGES_URL}/${VIDEO_DIR_PATH}/${film.dirName}/Video.webm`;
+            
+            playerTitle.textContent = film.title + " - " + (currentLang === 'en' ? "Public Domain" : "Domaine Public");
+            videoPlayer.src = videoURL;
+            videoPlayer.load(); // Prepare video for playback
+            
+            loadFilmDetails(film.dirName); // Load notes asynchronously
+            
+            videoModal.style.display = "block";
+        }
+
+        function closeModal() {
+            videoPlayer.pause();
+            videoModal.style.display = "none";
+            videoPlayer.removeAttribute('src'); // Clear src to stop memory usage
+            videoPlayer.load();
+        }
+
+        window.onclick = function(event) {
+            if (event.target == videoModal) {
+                closeModal();
+            }
+        }
+
+        // Début du chargement des films
+        fetchFilmList();
+    </script>
+
+</body>
+</html>
